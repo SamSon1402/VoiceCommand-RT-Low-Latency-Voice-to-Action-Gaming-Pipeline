@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceCommand-RT | Real-Time Voice-to-Action Pipeline</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800&family=Share+Tech+Mono&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-cyan: #00f5ff;
+            --neon-pink: #ff00ff;
+            --neon-green: #39ff14;
+            --neon-orange: #ff6b35;
+            --neon-purple: #bf00ff;
+            --bg-black: #0a0a0f;
+            --bg-dark: #12121a;
+            --bg-card: #1a1a25;
+            --bg-hover: #252535;
+            --text-white: #f0f0f5;
+            --text-gray: #8888a0;
+            --text-dim: #5555666;
+            --border: rgba(0, 245, 255, 0.15);
+            --glow-cyan: 0 0 20px rgba(0, 245, 255, 0.5);
+            --glow-pink: 0 0 20px rgba(255, 0, 255, 0.5);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Exo 2', sans-serif;
+            background: var(--bg-black);
+            color: var(--text-white);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Cyberpunk Grid Background */
+        .cyber-grid {
+            position: fixed;
+            inset: 0;
+            background: 
+                linear-gradient(90deg, rgba(0, 245, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(rgba(0, 245, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            perspective: 500px;
+            pointer-events: none;
+        }
+
+        .cyber-grid::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to bottom, transparent 0%, var(--bg-black) 100%);
+        }
+
+        .glow-lines {
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .glow-line {
+            position: absolute;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
+            animation: scanLine 8s linear infinite;
+        }
+
+        @keyframes scanLine {
+            0% { transform: translateY(-100vh); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(100vh); opacity: 0; }
+        }
+
+        /* Header */
+        .header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(10, 10, 15, 0.9);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            padding: 0.75rem 2rem;
+        }
+
+        .header-inner {
+            max-width: 1800px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            box-shadow: var(--glow-cyan);
+            animation: iconPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes iconPulse {
+            0%, 100% { box-shadow: var(--glow-cyan); }
+            50% { box-shadow: 0 0 30px rgba(0, 245, 255, 0.8); }
+        }
+
+        .logo-text h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--neon-cyan), var(--neon-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .logo-text p {
+            font-size: 0.65rem;
+            color: var(--text-gray);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            font-family: 'Share Tech Mono', monospace;
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .stat-box {
+            text-align: center;
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .stat-value {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--neon-cyan);
+        }
+
+        .stat-label {
+            font-size: 0.6rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Main Layout */
+        .main {
+            position: relative;
+            z-index: 1;
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 420px;
+            gap: 1.25rem;
+            min-height: calc(100vh - 140px);
+        }
+
+        @media (max-width: 1200px) {
+            .dashboard { grid-template-columns: 1fr; }
+        }
+
+        /* Voice Control Panel */
+        .voice-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--neon-cyan);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card-body {
+            padding: 1.25rem;
+        }
+
+        /* Microphone Visual */
+        .mic-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        .mic-button {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, var(--bg-dark), var(--bg-card));
+            border: 3px solid var(--neon-cyan);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.3s ease;
+            box-shadow: inset 0 -5px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .mic-button::before {
+            content: '';
+            position: absolute;
+            inset: -15px;
+            border-radius: 50%;
+            border: 2px solid var(--neon-cyan);
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .mic-button:hover::before {
+            opacity: 0.5;
+            inset: -20px;
+        }
+
+        .mic-button.listening {
+            border-color: var(--neon-green);
+            box-shadow: var(--glow-cyan), inset 0 -5px 20px rgba(0, 0, 0, 0.5);
+            animation: micPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes micPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .mic-button.listening::before {
+            opacity: 1;
+            border-color: var(--neon-green);
+            animation: micRing 1.5s ease-out infinite;
+        }
+
+        @keyframes micRing {
+            0% { inset: -15px; opacity: 1; }
+            100% { inset: -50px; opacity: 0; }
+        }
+
+        .mic-icon {
+            font-size: 3.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .mic-button.listening .mic-icon {
+            animation: micBounce 0.5s ease infinite;
+        }
+
+        @keyframes micBounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        .mic-status {
+            margin-top: 1.5rem;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text-gray);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .mic-button.listening + .mic-status {
+            color: var(--neon-green);
+        }
+
+        /* Waveform */
+        .waveform-container {
+            margin-top: 1.5rem;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+        }
+
+        .wave-bar {
+            width: 4px;
+            height: 20px;
+            background: var(--neon-cyan);
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+
+        .listening .wave-bar {
+            animation: wave 0.5s ease-in-out infinite;
+        }
+
+        @keyframes wave {
+            0%, 100% { height: 20px; }
+            50% { height: 60px; }
+        }
+
+        /* Transcript Display */
+        .transcript-box {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            min-height: 120px;
+            position: relative;
+        }
+
+        .transcript-label {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 0.75rem;
+        }
+
+        .transcript-text {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.1rem;
+            line-height: 1.6;
+            color: var(--neon-cyan);
+            min-height: 50px;
+        }
+
+        .transcript-text.active {
+            animation: textGlow 0.5s ease;
+        }
+
+        @keyframes textGlow {
+            0% { text-shadow: 0 0 20px var(--neon-cyan); }
+            100% { text-shadow: none; }
+        }
+
+        .transcript-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1.2em;
+            background: var(--neon-cyan);
+            animation: blink 0.8s step-end infinite;
+            vertical-align: text-bottom;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* Intent Classification */
+        .intent-display {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .intent-card {
+            flex: 1;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .intent-card.matched {
+            border-color: var(--neon-green);
+            box-shadow: 0 0 15px rgba(57, 255, 20, 0.3);
+        }
+
+        .intent-label {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .intent-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--neon-pink);
+        }
+
+        .intent-card.matched .intent-value {
+            color: var(--neon-green);
+        }
+
+        .intent-confidence {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-gray);
+            margin-top: 0.3rem;
+        }
+
+        /* Game Preview */
+        .game-preview {
+            background: var(--bg-dark);
+            border-radius: 12px;
+            padding: 1.5rem;
+            position: relative;
+            min-height: 280px;
+        }
+
+        .game-hud {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .hud-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .hud-icon {
+            font-size: 1.2rem;
+        }
+
+        .hud-bar {
+            width: 100px;
+            height: 8px;
+            background: var(--bg-card);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .hud-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .hud-fill.health { background: linear-gradient(90deg, #ff4444, #ff8888); }
+        .hud-fill.shield { background: linear-gradient(90deg, var(--neon-cyan), #88ffff); }
+        .hud-fill.energy { background: linear-gradient(90deg, var(--neon-purple), #dd88ff); }
+
+        .game-scene {
+            position: relative;
+            height: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: linear-gradient(180deg, #0a0a15 0%, #151525 100%);
+            overflow: hidden;
+        }
+
+        .player-char {
+            font-size: 3rem;
+            position: relative;
+            z-index: 2;
+            transition: all 0.3s ease;
+        }
+
+        .enemy {
+            position: absolute;
+            font-size: 2rem;
+            transition: all 0.5s ease;
+        }
+
+        .enemy.highlighted {
+            filter: drop-shadow(0 0 10px var(--neon-orange));
+            animation: enemyHighlight 0.5s ease infinite;
+        }
+
+        @keyframes enemyHighlight {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .action-feedback {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--neon-green);
+            text-shadow: 0 0 20px var(--neon-green);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .action-feedback.show {
+            animation: actionPop 1s ease forwards;
+        }
+
+        @keyframes actionPop {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+            20% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+            100% { opacity: 0; transform: translate(-50%, -80%) scale(1); }
+        }
+
+        /* Pipeline Panel */
+        .pipeline-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .pipeline-flow {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .pipeline-stage {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .pipeline-stage.active {
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 15px rgba(0, 245, 255, 0.2);
+        }
+
+        .pipeline-stage.complete {
+            border-color: var(--neon-green);
+        }
+
+        .stage-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .stage-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .stage-time {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--neon-green);
+        }
+
+        .stage-details {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        .pipeline-connector {
+            width: 2px;
+            height: 20px;
+            background: var(--border);
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .pipeline-connector.active {
+            background: linear-gradient(to bottom, var(--neon-cyan), var(--neon-green));
+            animation: connectorFlow 1s ease infinite;
+        }
+
+        @keyframes connectorFlow {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+
+        /* Command History */
+        .command-history {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .command-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: var(--bg-dark);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .command-item:hover {
+            background: var(--bg-hover);
+        }
+
+        .command-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+
+        .command-icon.action { background: rgba(0, 245, 255, 0.2); }
+        .command-icon.setting { background: rgba(191, 0, 255, 0.2); }
+        .command-icon.tactical { background: rgba(255, 107, 53, 0.2); }
+
+        .command-content {
+            flex: 1;
+        }
+
+        .command-text {
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .command-meta {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        /* Latency Monitor */
+        .latency-monitor {
+            background: var(--bg-dark);
+            border-radius: 10px;
+            padding: 1rem;
+        }
+
+        .latency-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .latency-title {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .latency-value {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--neon-green);
+        }
+
+        .latency-value.warning { color: var(--neon-orange); }
+        .latency-value.critical { color: var(--neon-pink); }
+
+        .latency-chart {
+            height: 60px;
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+        }
+
+        .latency-bar {
+            flex: 1;
+            background: var(--neon-cyan);
+            border-radius: 2px 2px 0 0;
+            transition: height 0.3s ease;
+            min-height: 4px;
+        }
+
+        .latency-bar.warning { background: var(--neon-orange); }
+        .latency-bar.critical { background: var(--neon-pink); }
+
+        /* Metrics Grid */
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem;
+        }
+
+        .metric-box {
+            background: var(--bg-dark);
+            border-radius: 10px;
+            padding: 0.75rem;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        .metric-icon {
+            font-size: 1.3rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .metric-val {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--neon-cyan);
+        }
+
+        .metric-label {
+            font-size: 0.55rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: var(--bg-dark); }
+        ::-webkit-scrollbar-thumb { background: var(--neon-cyan); border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <div class="cyber-grid"></div>
+    <div class="glow-lines">
+        <div class="glow-line" style="width: 100%; top: 30%; animation-delay: 0s;"></div>
+        <div class="glow-line" style="width: 60%; top: 60%; animation-delay: 3s;"></div>
+    </div>
+
+    <header class="header">
+        <div class="header-inner">
+            <div class="logo">
+                <div class="logo-icon">🎙️</div>
+                <div class="logo-text">
+                    <h1>VoiceCommand-RT</h1>
+                    <p>Real-Time Voice Pipeline</p>
+                </div>
+            </div>
+            <div class="header-stats">
+                <div class="stat-box">
+                    <div class="stat-value" id="avgLatency">187ms</div>
+                    <div class="stat-label">Avg Latency</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="accuracy">96.4%</div>
+                    <div class="stat-label">Accuracy</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="commandCount">0</div>
+                    <div class="stat-label">Commands</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="dashboard">
+            <div class="voice-panel">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title"><span>🎤</span> Voice Input</span>
+                        <span style="font-size: 0.7rem; color: var(--text-dim);">Whisper v3 • Real-time</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="mic-container" id="micContainer">
+                            <div class="mic-button" id="micButton" onclick="toggleListening()">
+                                <span class="mic-icon">🎙️</span>
+                            </div>
+                            <div class="mic-status" id="micStatus">Click to Start</div>
+                            <div class="waveform-container" id="waveform"></div>
+                        </div>
+                        
+                        <div class="transcript-box">
+                            <div class="transcript-label">Live Transcript</div>
+                            <div class="transcript-text" id="transcript">
+                                <span class="transcript-cursor"></span>
+                            </div>
+                        </div>
+
+                        <div class="intent-display">
+                            <div class="intent-card" id="intentCard">
+                                <div class="intent-label">Detected Intent</div>
+                                <div class="intent-value" id="intentValue">—</div>
+                                <div class="intent-confidence" id="intentConf">Confidence: —</div>
+                            </div>
+                            <div class="intent-card" id="actionCard">
+                                <div class="intent-label">Mapped Action</div>
+                                <div class="intent-value" id="actionValue">—</div>
+                                <div class="intent-confidence" id="actionKey">Key: —</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title"><span>🎮</span> Game Preview</span>
+                        <span style="font-size: 0.7rem; color: var(--neon-green);">● CONNECTED</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="game-preview">
+                            <div class="game-hud">
+                                <div class="hud-item">
+                                    <span class="hud-icon">❤️</span>
+                                    <div class="hud-bar"><div class="hud-fill health" id="healthBar" style="width: 75%;"></div></div>
+                                </div>
+                                <div class="hud-item">
+                                    <span class="hud-icon">🛡️</span>
+                                    <div class="hud-bar"><div class="hud-fill shield" id="shieldBar" style="width: 50%;"></div></div>
+                                </div>
+                                <div class="hud-item">
+                                    <span class="hud-icon">⚡</span>
+                                    <div class="hud-bar"><div class="hud-fill energy" id="energyBar" style="width: 90%;"></div></div>
+                                </div>
+                            </div>
+                            <div class="game-scene" id="gameScene">
+                                <div class="enemy" id="enemy1" style="top: 20%; left: 15%;">👾</div>
+                                <div class="enemy" id="enemy2" style="top: 60%; left: 75%;">👹</div>
+                                <div class="enemy" id="enemy3" style="top: 35%; right: 20%;">🤖</div>
+                                <div class="player-char" id="player">🦸</div>
+                                <div class="action-feedback" id="actionFeedback"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pipeline-panel">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title"><span>⚡</span> Pipeline Status</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="pipeline-flow">
+                            <div class="pipeline-stage" id="sttStage">
+                                <div class="stage-header">
+                                    <span class="stage-name"><span>🎤</span> Speech-to-Text</span>
+                                    <span class="stage-time" id="sttTime">—</span>
+                                </div>
+                                <div class="stage-details" id="sttDetails">Whisper v3 Turbo | Streaming mode</div>
+                            </div>
+                            <div class="pipeline-connector" id="conn1"></div>
+                            <div class="pipeline-stage" id="nlpStage">
+                                <div class="stage-header">
+                                    <span class="stage-name"><span>🧠</span> Intent Classification</span>
+                                    <span class="stage-time" id="nlpTime">—</span>
+                                </div>
+                                <div class="stage-details" id="nlpDetails">DistilBERT fine-tuned | 47 intents</div>
+                            </div>
+                            <div class="pipeline-connector" id="conn2"></div>
+                            <div class="pipeline-stage" id="mapStage">
+                                <div class="stage-header">
+                                    <span class="stage-name"><span>🎯</span> Action Mapping</span>
+                                    <span class="stage-time" id="mapTime">—</span>
+                                </div>
+                                <div class="stage-details" id="mapDetails">Custom action bindings loaded</div>
+                            </div>
+                            <div class="pipeline-connector" id="conn3"></div>
+                            <div class="pipeline-stage" id="execStage">
+                                <div class="stage-header">
+                                    <span class="stage-name"><span>🚀</span> Execution</span>
+                                    <span class="stage-time" id="execTime">—</span>
+                                </div>
+                                <div class="stage-details" id="execDetails">DirectInput injection ready</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title"><span>📊</span> Latency Monitor</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="latency-monitor">
+                            <div class="latency-header">
+                                <span class="latency-title">End-to-End Latency</span>
+                                <span class="latency-value" id="currentLatency">—</span>
+                            </div>
+                            <div class="latency-chart" id="latencyChart"></div>
+                        </div>
+                        <div class="metrics-row" style="margin-top: 1rem;">
+                            <div class="metric-box">
+                                <div class="metric-icon">🎤</div>
+                                <div class="metric-val" id="sttLatency">—</div>
+                                <div class="metric-label">STT</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-icon">🧠</div>
+                                <div class="metric-val" id="nlpLatency">—</div>
+                                <div class="metric-label">NLP</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-icon">🎯</div>
+                                <div class="metric-val" id="mapLatency">—</div>
+                                <div class="metric-label">Map</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-icon">🚀</div>
+                                <div class="metric-val" id="execLatency">—</div>
+                                <div class="metric-label">Exec</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title"><span>📜</span> Command History</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="command-history" id="commandHistory"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Command mappings
+        const commandMappings = {
+            'reload': { intent: 'RELOAD_WEAPON', action: 'Reload', key: 'R', icon: '🔄', type: 'action' },
+            'switch weapon': { intent: 'SWITCH_WEAPON', action: 'Switch Weapon', key: 'Q', icon: '🔫', type: 'action' },
+            'grenade': { intent: 'THROW_GRENADE', action: 'Throw Grenade', key: 'G', icon: '💣', type: 'tactical' },
+            'heal': { intent: 'USE_HEALTH', action: 'Use Health Pack', key: 'H', icon: '💊', type: 'action' },
+            'shield': { intent: 'ACTIVATE_SHIELD', action: 'Activate Shield', key: 'V', icon: '🛡️', type: 'tactical' },
+            'crouch': { intent: 'CROUCH', action: 'Toggle Crouch', key: 'C', icon: '🧎', type: 'action' },
+            'sprint': { intent: 'SPRINT', action: 'Sprint', key: 'SHIFT', icon: '🏃', type: 'action' },
+            'mark target': { intent: 'MARK_ENEMY', action: 'Mark Target', key: 'T', icon: '🎯', type: 'tactical' },
+            'highlight enemies': { intent: 'HIGHLIGHT_ALL', action: 'Highlight Enemies', key: 'TAB', icon: '👁️', type: 'tactical' },
+            'pause': { intent: 'PAUSE_GAME', action: 'Pause', key: 'ESC', icon: '⏸️', type: 'setting' },
+            'open map': { intent: 'OPEN_MAP', action: 'Open Map', key: 'M', icon: '🗺️', type: 'setting' },
+            'inventory': { intent: 'OPEN_INVENTORY', action: 'Open Inventory', key: 'I', icon: '🎒', type: 'setting' },
+            'ultimate': { intent: 'USE_ULTIMATE', action: 'Ultimate Ability', key: 'Z', icon: '⚡', type: 'tactical' },
+            'melee': { intent: 'MELEE_ATTACK', action: 'Melee Attack', key: 'F', icon: '👊', type: 'action' }
+        };
+
+        // Sample voice commands to simulate
+        const sampleCommands = [
+            'reload',
+            'highlight enemies',
+            'mark target',
+            'shield',
+            'heal',
+            'switch weapon',
+            'grenade',
+            'ultimate',
+            'open map',
+            'crouch'
+        ];
+
+        let isListening = false;
+        let commandCount = 0;
+        let latencyHistory = [];
+
+        function init() {
+            initWaveform();
+            initLatencyChart();
+        }
+
+        function initWaveform() {
+            const container = document.getElementById('waveform');
+            for (let i = 0; i < 40; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'wave-bar';
+                bar.style.animationDelay = (i * 0.05) + 's';
+                container.appendChild(bar);
+            }
+        }
+
+        function initLatencyChart() {
+            const chart = document.getElementById('latencyChart');
+            for (let i = 0; i < 30; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'latency-bar';
+                bar.style.height = '4px';
+                chart.appendChild(bar);
+            }
+        }
+
+        function toggleListening() {
+            isListening = !isListening;
+            const btn = document.getElementById('micButton');
+            const status = document.getElementById('micStatus');
+            const container = document.getElementById('micContainer');
+            const waveform = document.getElementById('waveform');
+
+            if (isListening) {
+                btn.classList.add('listening');
+                waveform.classList.add('listening');
+                status.textContent = 'Listening...';
+                startSimulation();
+            } else {
+                btn.classList.remove('listening');
+                waveform.classList.remove('listening');
+                status.textContent = 'Click to Start';
+            }
+        }
+
+        function startSimulation() {
+            if (!isListening) return;
+
+            // Simulate random command after delay
+            const delay = 2000 + Math.random() * 3000;
+            setTimeout(() => {
+                if (isListening) {
+                    const command = sampleCommands[Math.floor(Math.random() * sampleCommands.length)];
+                    processCommand(command);
+                    startSimulation();
+                }
+            }, delay);
+        }
+
+        async function processCommand(command) {
+            const mapping = commandMappings[command];
+            if (!mapping) return;
+
+            // Animate transcript
+            await animateTranscript(command);
+
+            // Run pipeline stages
+            await runPipeline(command, mapping);
+
+            // Execute action in game preview
+            executeGameAction(mapping);
+
+            // Update history and stats
+            addToHistory(command, mapping);
+            updateStats();
+        }
+
+        async function animateTranscript(text) {
+            const transcript = document.getElementById('transcript');
+            transcript.classList.add('active');
+            
+            let displayed = '';
+            for (let i = 0; i < text.length; i++) {
+                displayed += text[i];
+                transcript.innerHTML = displayed + '<span class="transcript-cursor"></span>';
+                await sleep(30 + Math.random() * 20);
+            }
+
+            setTimeout(() => transcript.classList.remove('active'), 500);
+        }
+
+        async function runPipeline(command, mapping) {
+            const stages = ['stt', 'nlp', 'map', 'exec'];
+            const times = {
+                stt: 45 + Math.random() * 30,
+                nlp: 25 + Math.random() * 20,
+                map: 8 + Math.random() * 7,
+                exec: 12 + Math.random() * 10
+            };
+
+            let totalLatency = 0;
+
+            for (let i = 0; i < stages.length; i++) {
+                const stage = stages[i];
+                const stageEl = document.getElementById(stage + 'Stage');
+                const connEl = document.getElementById('conn' + (i + 1));
+                const timeEl = document.getElementById(stage + 'Time');
+                const detailsEl = document.getElementById(stage + 'Details');
+
+                // Activate stage
+                stageEl.classList.add('active');
+                if (connEl) connEl.classList.add('active');
+
+                await sleep(times[stage]);
+                
+                // Update time
+                const stageTime = Math.floor(times[stage]);
+                totalLatency += stageTime;
+                timeEl.textContent = stageTime + 'ms';
+                document.getElementById(stage + 'Latency').textContent = stageTime + 'ms';
+
+                // Update details based on stage
+                if (stage === 'nlp') {
+                    detailsEl.textContent = `Intent: ${mapping.intent} | Conf: ${(0.92 + Math.random() * 0.07).toFixed(2)}`;
+                } else if (stage === 'map') {
+                    detailsEl.textContent = `Action: ${mapping.action} → Key: ${mapping.key}`;
+                } else if (stage === 'exec') {
+                    detailsEl.textContent = `Sent: ${mapping.key} | Status: SUCCESS`;
+                }
+
+                stageEl.classList.remove('active');
+                stageEl.classList.add('complete');
+            }
+
+            // Update intent/action cards
+            const intentCard = document.getElementById('intentCard');
+            const actionCard = document.getElementById('actionCard');
+            intentCard.classList.add('matched');
+            actionCard.classList.add('matched');
+            document.getElementById('intentValue').textContent = mapping.intent;
+            document.getElementById('intentConf').textContent = `Confidence: ${(0.92 + Math.random() * 0.07).toFixed(2)}`;
+            document.getElementById('actionValue').textContent = mapping.action;
+            document.getElementById('actionKey').textContent = `Key: ${mapping.key}`;
+
+            // Update latency
+            updateLatency(totalLatency);
+
+            // Reset stages after delay
+            setTimeout(() => {
+                stages.forEach(s => {
+                    document.getElementById(s + 'Stage').classList.remove('complete');
+                    document.getElementById('conn' + (stages.indexOf(s) + 1))?.classList.remove('active');
+                });
+                intentCard.classList.remove('matched');
+                actionCard.classList.remove('matched');
+            }, 2000);
+        }
+
+        function executeGameAction(mapping) {
+            const feedback = document.getElementById('actionFeedback');
+            feedback.textContent = mapping.action.toUpperCase() + '!';
+            feedback.classList.add('show');
+
+            // Specific game effects
+            if (mapping.intent === 'USE_HEALTH') {
+                document.getElementById('healthBar').style.width = Math.min(100, 75 + 25) + '%';
+            } else if (mapping.intent === 'ACTIVATE_SHIELD') {
+                document.getElementById('shieldBar').style.width = '100%';
+            } else if (mapping.intent === 'HIGHLIGHT_ALL') {
+                document.querySelectorAll('.enemy').forEach(e => e.classList.add('highlighted'));
+                setTimeout(() => document.querySelectorAll('.enemy').forEach(e => e.classList.remove('highlighted')), 2000);
+            } else if (mapping.intent === 'MARK_ENEMY') {
+                const enemies = document.querySelectorAll('.enemy');
+                const target = enemies[Math.floor(Math.random() * enemies.length)];
+                target.classList.add('highlighted');
+                setTimeout(() => target.classList.remove('highlighted'), 2000);
+            } else if (mapping.intent === 'USE_ULTIMATE') {
+                document.getElementById('energyBar').style.width = '10%';
+                setTimeout(() => document.getElementById('energyBar').style.width = '90%', 1500);
+            }
+
+            setTimeout(() => feedback.classList.remove('show'), 1000);
+        }
+
+        function addToHistory(command, mapping) {
+            const history = document.getElementById('commandHistory');
+            const item = document.createElement('div');
+            item.className = 'command-item';
+            item.innerHTML = `
+                <div class="command-icon ${mapping.type}">${mapping.icon}</div>
+                <div class="command-content">
+                    <div class="command-text">"${command}"</div>
+                    <div class="command-meta">
+                        <span>→ ${mapping.action}</span>
+                        <span>${new Date().toLocaleTimeString()}</span>
+                    </div>
+                </div>
+            `;
+            history.insertBefore(item, history.firstChild);
+
+            if (history.children.length > 10) {
+                history.removeChild(history.lastChild);
+            }
+        }
+
+        function updateLatency(total) {
+            latencyHistory.push(total);
+            if (latencyHistory.length > 30) latencyHistory.shift();
+
+            // Update current latency display
+            const latencyEl = document.getElementById('currentLatency');
+            latencyEl.textContent = total + 'ms';
+            latencyEl.className = 'latency-value' + (total > 300 ? ' critical' : total > 200 ? ' warning' : '');
+
+            // Update chart
+            const chart = document.getElementById('latencyChart');
+            const bars = chart.children;
+            const max = Math.max(...latencyHistory, 300);
+
+            for (let i = 0; i < bars.length; i++) {
+                if (i < latencyHistory.length) {
+                    const val = latencyHistory[i];
+                    bars[i].style.height = (val / max * 100) + '%';
+                    bars[i].className = 'latency-bar' + (val > 300 ? ' critical' : val > 200 ? ' warning' : '');
+                }
+            }
+        }
+
+        function updateStats() {
+            commandCount++;
+            document.getElementById('commandCount').textContent = commandCount;
+
+            // Update average latency
+            if (latencyHistory.length > 0) {
+                const avg = Math.floor(latencyHistory.reduce((a, b) => a + b, 0) / latencyHistory.length);
+                document.getElementById('avgLatency').textContent = avg + 'ms';
+            }
+
+            // Simulate accuracy fluctuation
+            const accuracy = (95.5 + Math.random() * 3).toFixed(1);
+            document.getElementById('accuracy').textContent = accuracy + '%';
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
